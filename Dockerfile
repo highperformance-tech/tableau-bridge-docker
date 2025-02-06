@@ -37,5 +37,5 @@ VOLUME /root/Documents/My_Tableau_Bridge_Repository/Logs
 # Set working directory
 WORKDIR /opt/tableau/tableau_bridge
 
-# Default command to run Bridge in interactive mode
-CMD ["/bin/bash"]
+# Run Bridge in foreground
+ENTRYPOINT ["/bin/sh", "-c", "/opt/tableau/tableau_bridge/bin/run-bridge.sh", "-e"]
