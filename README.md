@@ -73,7 +73,55 @@ cp -r jdbc /opt/tableau/tableau_driver/jdbc
 
 - You can customize the `Dockerfile` and `drivers/install.sh` script to include additional dependencies or configurations.
 
-### 3. Run the Container
+### 3. Container Management
+
+The project includes a `bridge-manager.sh` script to help manage the lifecycle of Bridge containers. This script provides an easy-to-use interface for users with minimal Docker experience.
+
+Available commands:
+```bash
+# List all Bridge containers (running and stopped)
+./bridge-manager.sh list
+
+# List available Bridge Docker images
+./bridge-manager.sh images
+
+# Start a new Bridge container (without pool)
+./bridge-manager.sh start \
+    -l "/path/to/bridge/logs" \
+    -t "/path/to/token.json" \
+    -u "your-email@domain.com" \
+    -c "your-bridge-name" \
+    -s "your-site-name" \
+    -i "MyToken"
+
+# Start a new Bridge container (with optional pool)
+./bridge-manager.sh start \
+    -l "/path/to/bridge/logs" \
+    -t "/path/to/token.json" \
+    -u "your-email@domain.com" \
+    -c "your-bridge-name" \
+    -s "your-site-name" \
+    -p "your-pool-id" \
+    -i "MyToken"
+
+# Stop a running container
+./bridge-manager.sh stop -n container-name
+
+# Restart a container
+./bridge-manager.sh restart -n container-name
+
+# Open a shell in a running container for troubleshooting
+./bridge-manager.sh shell -n container-name
+```
+
+For detailed usage information, run:
+```bash
+./bridge-manager.sh
+```
+
+Note: When starting a container, the script automatically creates a unique logs directory for each container using the format `container-name-YYYYMMDD-HHMMSS` within the specified logs path. This ensures that log files from different containers don't conflict with each other.
+
+### 4. Token Configuration
 
 Create a JSON file containing your PAT token, for example `token.json`:
 ```json
@@ -82,17 +130,9 @@ Create a JSON file containing your PAT token, for example `token.json`:
 }
 ```
 
-Run the container with mounted volumes for logs and the token file:
-```bash
-docker run -it \
-    --volume /path/to/bridge/logs:/root/Documents/My_Tableau_Bridge_Repository/Logs \
-    --volume /path/to/token.json:/opt/tableau/token.json \
-    tableau-bridge --patTokenId="MyToken" --userEmail="your-email@domain.com" --client="your-bridge-name" --site="your-site-name" --patTokenFile="/opt/tableau/token.json" --poolId="your-pool-id"
-```
-
 ## Monitoring
 
-Bridge logs are available in the mounted logs directory on your host machine.
+Bridge logs are available in container-specific directories under the mounted logs directory on your host machine. Each container gets its own timestamped directory to prevent log file conflicts when running multiple containers.
 
 ## Security Notes
 
@@ -115,4 +155,5 @@ If you encounter issues when starting the Bridge client:
 - Ensure all required parameters are provided.
 - Verify that the PAT token file exists and is readable.
 - Check that the PAT token has not expired.
-- For detailed logs, review the logs in the mounted logs directory.
+- For detailed logs, review the logs in the container-specific directory under the mounted logs path.
+- Use the `shell` command to access a running container's shell for advanced troubleshooting.
