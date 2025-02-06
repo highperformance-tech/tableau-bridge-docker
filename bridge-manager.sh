@@ -14,15 +14,15 @@ Usage: $0 <command> [options]
 Manage Tableau Bridge Docker containers lifecycle.
 
 Commands:
-    list                    List all Tableau Bridge containers (running and stopped)
-    images                  List all available Tableau Bridge Docker images
-    start [options]        Start a new Tableau Bridge container
-    stop [-n name]         Stop a running container
-    restart [-n name]      Restart a container
-    shell [-n name]        Open an interactive shell in a running container
+    list                  List all Tableau Bridge containers (running and stopped)
+    images                List all available Tableau Bridge Docker images
+    start [options]       Start a new Tableau Bridge container
+    stop [-n name]        Stop a running container
+    restart [-n name]     Restart a container
+    shell [-n name]       Open an interactive shell in a running container
 
 Start Options:
-    -n <name>              Container name (default: tableau-bridge)
+    -n <name>             Container name (default: tableau-bridge)
     -l <path>             Host directory for logs
     -t <path>             Host token file path
     -u <email>            User email
