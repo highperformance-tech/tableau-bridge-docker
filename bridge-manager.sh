@@ -15,30 +15,29 @@ Usage: $0 <command> [options]
 Manage Tableau Bridge Docker containers lifecycle.
 
 Commands:
-    list                    List all Tableau Bridge containers (running and stopped)
-    images                  List all available Tableau Bridge Docker images
-    start [options]        Start a new Tableau Bridge container
-    stop [-n name]         Stop a running container
-    restart [-n name]      Restart a container
-    shell [-n name]        Open an interactive shell in a running container
+    list                  List all Tableau Bridge containers (running and stopped)
+    images                List all available Tableau Bridge Docker images
+    start [options]       Start a new Tableau Bridge container
+    stop [-n name]        Stop a running container
+    restart [-n name]     Restart a container
+    shell [-n name]       Open an interactive shell in a running container
 
 Start Options:
-    -n <name>              Container name (default: tableau-bridge)
+    -n <name>             Container and bridge name (default: tableau-bridge)
     -l <path>             Host directory for logs
     -t <path>             Host token file path
     -u <email>            User email
-    -c <name>             Client/bridge name
     -s <site>             Site name
     -p <pool-id>          Pool ID (optional)
     -i <token-id>         PAT token ID
     -v <version>          Bridge version to use (e.g., 2024.1, 20241.23.0202.1000)
-                         If not specified, lists available versions for selection
+                          If not specified, lists available versions for selection
 
 Examples:
     $0 list
     $0 images
-    $0 start -l "/path/to/logs" -t "/path/to/token.json" -u "user@example.com" -c "bridge1" -s "site" -i "MyToken"
-    $0 start -v 2024.1 -l "/path/to/logs" -t "/path/to/token.json" -u "user@example.com" -c "bridge1" -s "site" -i "MyToken"
+    $0 start -l "/path/to/logs" -t "/path/to/token.json" -u "user@example.com" -n "bridge1" -s "site" -i "MyToken"
+    $0 start -v 2024.1 -l "/path/to/logs" -t "/path/to/token.json" -u "user@example.com" -n "bridge1" -s "site" -i "MyToken"
     $0 stop -n bridge1
     $0 restart -n bridge1
     $0 shell -n bridge1    # Open shell in running container
@@ -121,20 +120,18 @@ start_container() {
     local logs_path=""
     local token_path=""
     local user_email=""
-    local client_name=""
     local site_name=""
     local pool_id=""
     local token_id=""
     local version=""
 
     # Parse options
-    while getopts "n:l:t:u:c:s:p:i:v:" opt; do
+    while getopts "n:l:t:u:s:p:i:v:" opt; do
         case $opt in
             n) name="$OPTARG" ;;
             l) logs_path="$OPTARG" ;;
             t) token_path="$OPTARG" ;;
             u) user_email="$OPTARG" ;;
-            c) client_name="$OPTARG" ;;
             s) site_name="$OPTARG" ;;
             p) pool_id="$OPTARG" ;;
             i) token_id="$OPTARG" ;;
@@ -144,7 +141,7 @@ start_container() {
     done
 
     # Verify required parameters
-    if [[ -z "$logs_path" || -z "$token_path" || -z "$user_email" || -z "$client_name" || 
+    if [[ -z "$logs_path" || -z "$token_path" || -z "$user_email" ||
           -z "$site_name" || -z "$token_id" ]]; then
         echo "Error: Missing required parameters" >&2
         show_usage
@@ -166,8 +163,10 @@ start_container() {
     image=$(select_image "$version")
     echo "Using image: $image"
 
-    # Create container-specific logs directory
+    # Create container-specific logs directory and ensure absolute path
     local container_logs_dir
+    # Convert to absolute path if relative
+    logs_path=$(cd "$logs_path" && pwd) || { echo "Error: Could not resolve logs directory path" >&2; exit 1; }
     container_logs_dir=$(create_container_logs_dir "$logs_path" "$name")
     echo "Created container-specific logs directory: $container_logs_dir"
 
@@ -181,7 +180,7 @@ start_container() {
         \"$image\" \
         --patTokenId=\"$token_id\" \
         --userEmail=\"$user_email\" \
-        --client=\"$client_name\" \
+        --client=\"$name\" \
         --site=\"$site_name\" \
         --patTokenFile=\"/opt/tableau/token.json\""
 
