@@ -21,6 +21,7 @@ Commands:
     remove <name>        Remove a container (must be stopped first)
     restart <name>       Restart a container
     shell <name>         Open an interactive shell in a running container
+    logs <name>          Tail the logs of a running container
 
 Start Options:
     -n <name>             Container and bridge name (required)
@@ -344,6 +345,14 @@ restart_container() {
     docker restart "$name"
     echo "Container restarted successfully"
 }
+# Function to tail container logs
+logs_container() {
+    local name="$1"
+    validate_container_name "$name" true
+
+    echo "Tailing logs for container '$name'..."
+    docker logs -f "$name"
+}
 
 # Function to open shell in container
 shell_container() {
@@ -391,6 +400,11 @@ case "$1" in
         shift
         validate_container_name "${1:-}" true
         shell_container "$1"
+        ;;
+    "logs")
+        shift
+        validate_container_name "${1:-}" true
+        logs_container "$1"
         ;;
     *)
         echo "Unknown command: $1" >&2

@@ -90,7 +90,7 @@ Available commands:
     -l "/path/to/bridge/logs" \
     -t "/path/to/token.json" \
     -u "your-email@domain.com" \
-    -c "your-bridge-name" \
+    -n "your-bridge-name" \
     -s "your-site-name" \
     -i "MyToken"
 
@@ -100,7 +100,7 @@ Available commands:
     -l "/path/to/bridge/logs" \
     -t "/path/to/token.json" \
     -u "your-email@domain.com" \
-    -c "your-bridge-name" \
+    -n "your-bridge-name" \
     -s "your-site-name" \
     -i "MyToken"
 
@@ -110,19 +110,22 @@ Available commands:
     -l "/path/to/bridge/logs" \
     -t "/path/to/token.json" \
     -u "your-email@domain.com" \
-    -c "your-bridge-name" \
+    -n "your-bridge-name" \
     -s "your-site-name" \
     -p "your-pool-id" \
     -i "MyToken"
 
 # Stop a running container
-./bridge-manager.sh stop -n container-name
+./bridge-manager.sh stop container-name
 
 # Restart a container
-./bridge-manager.sh restart -n container-name
+./bridge-manager.sh restart container-name
 
 # Open a shell in a running container for troubleshooting
-./bridge-manager.sh shell -n container-name
+./bridge-manager.sh shell container-name
+
+# View live logs of a running container
+./bridge-manager.sh logs container-name
 ```
 
 For detailed usage information, run:
@@ -170,11 +173,26 @@ To upgrade the Bridge client:
 4. Gradually replace existing containers with the updated version.
 5. Monitor for stability before full deployment.
 
+## Container Configuration Management
+
+When starting a Bridge container, the script performs several checks:
+- If a container with the specified name already exists:
+  1. Checks if the configuration (user email, site, token ID, pool ID, and image) matches
+  2. If configurations match and container is running: No action needed
+  3. If configurations match but container is stopped: Automatically starts the container
+  4. If configurations differ: Stops and removes the old container, then creates a new one
+- For new containers:
+  1. Creates a unique timestamped logs directory
+  2. Sets up volume mounts for logs and token file
+  3. Configures container with restart policy and specified parameters
+
 ## Troubleshooting
 
-If you encounter issues when starting the Bridge client:
-- Ensure all required parameters are provided.
-- Verify that the PAT token file exists and is readable.
-- Check that the PAT token has not expired.
-- For detailed logs, review the logs in the container-specific directory under the mounted logs path.
-- Use the `shell` command to access a running container's shell for advanced troubleshooting.
+If you encounter issues:
+- Ensure all required parameters are provided when starting a container
+- Verify that the PAT token file exists and is readable
+- Check that the PAT token has not expired
+- Review logs using:
+  * Container-specific logs directory under the mounted logs path
+  * Live container logs using `./bridge-manager.sh logs container-name`
+- Use `./bridge-manager.sh shell container-name` to access a running container's shell for advanced troubleshooting
