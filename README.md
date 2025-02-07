@@ -38,7 +38,7 @@ The script will:
 - Download and cache the latest Tableau Bridge RPM.
 - Download and cache the latest Amazon Redshift ODBC driver.
 - Move the downloaded driver into the `drivers` directory.
-- Build the Docker image if it does not already exist, tagging it with the full build number and a simplified version.
+- Build the Docker image if it does not already exist, tagging it with both the full build number and a simplified version.
 
 ### 2. Dockerfile and Drivers Installation
 
@@ -85,7 +85,7 @@ Available commands:
 # List available Bridge Docker images
 ./bridge-manager.sh images
 
-# Start a new Bridge container (without pool)
+# Start a new Bridge container (interactive version selection)
 ./bridge-manager.sh start \
     -l "/path/to/bridge/logs" \
     -t "/path/to/token.json" \
@@ -94,8 +94,19 @@ Available commands:
     -s "your-site-name" \
     -i "MyToken"
 
-# Start a new Bridge container (with optional pool)
+# Start a new Bridge container (specific version)
 ./bridge-manager.sh start \
+    -v "2024.1" \
+    -l "/path/to/bridge/logs" \
+    -t "/path/to/token.json" \
+    -u "your-email@domain.com" \
+    -c "your-bridge-name" \
+    -s "your-site-name" \
+    -i "MyToken"
+
+# Start with optional pool ID
+./bridge-manager.sh start \
+    -v "2024.1" \
     -l "/path/to/bridge/logs" \
     -t "/path/to/token.json" \
     -u "your-email@domain.com" \
@@ -118,6 +129,16 @@ For detailed usage information, run:
 ```bash
 ./bridge-manager.sh
 ```
+
+#### Version Selection
+When starting a container, you can specify the Bridge version in two ways:
+1. Use the `-v` flag to specify a version (e.g., `-v 2024.1` or `-v 20241.23.0202.1000`)
+2. Omit the `-v` flag to get an interactive menu of available versions
+
+The script will:
+- For exact version matches (e.g., `-v 2024.1`): Use that specific version
+- For partial matches: Use the first matching version
+- For interactive selection: Display a numbered list of available versions to choose from
 
 Note: When starting a container, the script automatically creates a unique logs directory for each container using the format `container-name-YYYYMMDD-HHMMSS` within the specified logs path. This ensures that log files from different containers don't conflict with each other.
 

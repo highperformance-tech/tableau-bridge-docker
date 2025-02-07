@@ -5,6 +5,7 @@ set -euo pipefail
 
 # Default container name
 DEFAULT_NAME="tableau-bridge"
+DEFAULT_IMAGE="tableau-bridge:latest"
 
 # Help/Usage function
 show_usage() {
@@ -14,15 +15,15 @@ Usage: $0 <command> [options]
 Manage Tableau Bridge Docker containers lifecycle.
 
 Commands:
-    list                  List all Tableau Bridge containers (running and stopped)
-    images                List all available Tableau Bridge Docker images
-    start [options]       Start a new Tableau Bridge container
-    stop [-n name]        Stop a running container
-    restart [-n name]     Restart a container
-    shell [-n name]       Open an interactive shell in a running container
+    list                    List all Tableau Bridge containers (running and stopped)
+    images                  List all available Tableau Bridge Docker images
+    start [options]        Start a new Tableau Bridge container
+    stop [-n name]         Stop a running container
+    restart [-n name]      Restart a container
+    shell [-n name]        Open an interactive shell in a running container
 
 Start Options:
-    -n <name>             Container name (default: tableau-bridge)
+    -n <name>              Container name (default: tableau-bridge)
     -l <path>             Host directory for logs
     -t <path>             Host token file path
     -u <email>            User email
@@ -30,12 +31,14 @@ Start Options:
     -s <site>             Site name
     -p <pool-id>          Pool ID (optional)
     -i <token-id>         PAT token ID
+    -v <version>          Bridge version to use (e.g., 2024.1, 20241.23.0202.1000)
+                         If not specified, lists available versions for selection
 
 Examples:
     $0 list
     $0 images
     $0 start -l "/path/to/logs" -t "/path/to/token.json" -u "user@example.com" -c "bridge1" -s "site" -i "MyToken"
-    $0 start -l "/path/to/logs" -t "/path/to/token.json" -u "user@example.com" -c "bridge1" -s "site" -p "pool1" -i "MyToken"
+    $0 start -v 2024.1 -l "/path/to/logs" -t "/path/to/token.json" -u "user@example.com" -c "bridge1" -s "site" -i "MyToken"
     $0 stop -n bridge1
     $0 restart -n bridge1
     $0 shell -n bridge1    # Open shell in running container
@@ -52,6 +55,51 @@ list_containers() {
 list_images() {
     echo "Available Tableau Bridge images:"
     docker images tableau-bridge --format "table {{.Repository}}\t{{.Tag}}\t{{.CreatedAt}}"
+}
+
+# Function to prompt for image selection
+select_image() {
+    local version="$1"
+    local images
+    
+    # If version is provided, try to find an exact match first
+    if [[ -n "$version" ]]; then
+        if docker images "tableau-bridge:$version" --quiet | grep -q .; then
+            echo "tableau-bridge:$version"
+            return 0
+        fi
+        # If no exact match, try partial match
+        images=$(docker images tableau-bridge --format "{{.Tag}}" | grep "$version" || true)
+        if [[ -n "$images" ]]; then
+            if [[ $(echo "$images" | wc -l) -eq 1 ]]; then
+                echo "tableau-bridge:$images"
+                return 0
+            fi
+        fi
+        echo "No image found matching version: $version" >&2
+        echo "Available versions:" >&2
+        docker images tableau-bridge --format "{{.Tag}}" >&2
+        exit 1
+    fi
+
+    # If no version specified or no match found, show selection menu
+    images=$(docker images tableau-bridge --format "{{.Tag}}")
+    if [[ -z "$images" ]]; then
+        echo "No Tableau Bridge images found" >&2
+        echo "Please run create-updated-bridge-container.sh first" >&2
+        exit 1
+    fi
+
+    echo "Available Tableau Bridge versions:"
+    select version in $images; do
+        if [[ -n "$version" ]]; then
+            echo "tableau-bridge:$version"
+            return 0
+        else
+            echo "Invalid selection" >&2
+            exit 1
+        fi
+    done
 }
 
 # Function to create container-specific logs directory
@@ -77,9 +125,10 @@ start_container() {
     local site_name=""
     local pool_id=""
     local token_id=""
+    local version=""
 
     # Parse options
-    while getopts "n:l:t:u:c:s:p:i:" opt; do
+    while getopts "n:l:t:u:c:s:p:i:v:" opt; do
         case $opt in
             n) name="$OPTARG" ;;
             l) logs_path="$OPTARG" ;;
@@ -89,6 +138,7 @@ start_container() {
             s) site_name="$OPTARG" ;;
             p) pool_id="$OPTARG" ;;
             i) token_id="$OPTARG" ;;
+            v) version="$OPTARG" ;;
             \?) echo "Invalid option: -$OPTARG" >&2; show_usage; exit 1 ;;
         esac
     done
@@ -111,6 +161,11 @@ start_container() {
         exit 1
     fi
 
+    # Select image version
+    local image
+    image=$(select_image "$version")
+    echo "Using image: $image"
+
     # Create container-specific logs directory
     local container_logs_dir
     container_logs_dir=$(create_container_logs_dir "$logs_path" "$name")
@@ -123,7 +178,7 @@ start_container() {
         --name \"$name\" \
         --volume \"$container_logs_dir:/root/Documents/My_Tableau_Bridge_Repository/Logs\" \
         --volume \"$token_path:/opt/tableau/token.json\" \
-        tableau-bridge \
+        \"$image\" \
         --patTokenId=\"$token_id\" \
         --userEmail=\"$user_email\" \
         --client=\"$client_name\" \
