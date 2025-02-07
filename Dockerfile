@@ -8,8 +8,13 @@ ENV LANGUAGE=en_US.UTF-8
 
 # Update system and install dependencies
 RUN yum -y update && \
-    yum -y install unixODBC && \
-    yum clean all
+    yum -y install \
+    unixODBC \
+    glibc-langpack-en \
+    findutils \
+    dbus-libs \
+    procps \
+    && yum clean all
 
 # Create directories for drivers and Bridge
 RUN mkdir -p /opt/tableau/tableau_driver/jdbc && \
@@ -38,4 +43,4 @@ VOLUME /root/Documents/My_Tableau_Bridge_Repository/Logs
 WORKDIR /opt/tableau/tableau_bridge
 
 # Run Bridge in foreground
-ENTRYPOINT ["/bin/sh", "-c", "/opt/tableau/tableau_bridge/bin/run-bridge.sh", "-e"]
+ENTRYPOINT ["/opt/tableau/tableau_bridge/bin/run-bridge.sh", "-e"]

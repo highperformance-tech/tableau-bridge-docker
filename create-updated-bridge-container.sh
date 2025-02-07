@@ -130,11 +130,62 @@ mv amazon-redshift-odbc.rpm drivers/
 echo "Downloads completed successfully!"
 
 # Extract simplified version from build number (e.g., 20243.25.0114.1153 -> 2024.3)
-VERSION=$(echo "$BUILD_NUMBER" | awk -F '.' '{print substr($1, 1, 4)"."substr($2, 1, 1)}')
+VERSION=$(echo "$BUILD_NUMBER" | awk -F '.' '{print substr($1, 1, 4)"."substr($1, 5, 6)}')
+
+# Function to check if any source files are newer than the image
+check_source_files() {
+    local image_time=$1
+    local needs_rebuild=false
+    local reason=""
+
+    # Check Dockerfile
+    if [ -f "Dockerfile" ]; then
+        file_time=$(stat -c %Y "Dockerfile")
+        if [ "$file_time" -gt "$image_time" ]; then
+            needs_rebuild=true
+            reason="Dockerfile has been modified"
+        fi
+    fi
+
+    # Check tableau-bridge.rpm
+    if [ -f "tableau-bridge.rpm" ]; then
+        file_time=$(stat -c %Y "tableau-bridge.rpm")
+        if [ "$file_time" -gt "$image_time" ]; then
+            needs_rebuild=true
+            reason="tableau-bridge.rpm has been modified"
+        fi
+    fi
+
+    # Check all files in drivers directory
+    if [ -d "drivers" ]; then
+        while IFS= read -r file; do
+            file_time=$(stat -c %Y "$file")
+            if [ "$file_time" -gt "$image_time" ]; then
+                needs_rebuild=true
+                reason="Files in drivers directory have been modified"
+                break
+            fi
+        done < <(find "drivers" -type f)
+    fi
+
+    if [ "$needs_rebuild" = true ]; then
+        echo "Rebuild needed: $reason"
+        return 1
+    fi
+    return 0
+}
 
 # Check if Docker image with current build number already exists
 if docker image inspect tableau-bridge:"$BUILD_NUMBER" > /dev/null 2>&1; then
-    echo "Docker image tableau-bridge:$BUILD_NUMBER already exists. Skipping build."
+    echo "Docker image tableau-bridge:$BUILD_NUMBER exists, checking for modifications..."
+    # Get image creation time - convert ISO 8601 to Unix timestamp
+    image_time=$(docker image inspect tableau-bridge:"$BUILD_NUMBER" --format='{{.Created}}' | date -d "$(cut -d'.' -f1)" +%s)
+    
+    if check_source_files "$image_time"; then
+        echo "No source files have been modified since last build. Skipping build."
+    else
+        run_cmd "docker buildx build --platform=linux/amd64 -t tableau-bridge:'$BUILD_NUMBER' ." "Rebuilding Docker image due to source modifications..."
+    fi
 else
     run_cmd "docker buildx build --platform=linux/amd64 -t tableau-bridge:'$BUILD_NUMBER' ." "Building Docker image..."
 fi

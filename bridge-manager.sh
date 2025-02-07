@@ -19,6 +19,7 @@ Commands:
     images                List all available Tableau Bridge Docker images
     start [options]       Start a new Tableau Bridge container
     stop [-n name]        Stop a running container
+    remove [-n name]      Remove a container (must be stopped first)
     restart [-n name]     Restart a container
     shell [-n name]       Open an interactive shell in a running container
 
@@ -47,7 +48,7 @@ EOF
 # Function to list containers
 list_containers() {
     echo "Listing all Tableau Bridge containers:"
-    docker ps -a --filter "name=tableau-bridge" --format "table {{.Names}}\t{{.Status}}\t{{.Image}}"
+    docker ps -a --filter "ancestor=tableau-bridge" --format "table {{.Names}}\t{{.Status}}\t{{.Image}}"
 }
 
 # Function to list images
@@ -99,6 +100,55 @@ select_image() {
             exit 1
         fi
     done
+}
+
+# Function to get container configuration
+get_container_config() {
+    local name="$1"
+    local config=""
+    
+    # Check if container exists
+    if ! docker ps -a --format '{{.Names}}' | grep -q "^${name}$"; then
+        return 1
+    fi
+
+    # Get container configuration and image
+    local cmd_config
+    local image_config
+    cmd_config=$(docker inspect "$name" --format '{{range .Config.Cmd}}{{.}} {{end}}')
+    image_config=$(docker inspect "$name" --format '{{.Config.Image}}')
+    echo "$cmd_config"$'\n'"$image_config"
+    return 0
+}
+
+# Function to check if container configurations match
+check_container_config() {
+    local name="$1"
+    local user_email="$2"
+    local site_name="$3"
+    local token_id="$4"
+    local pool_id="$5"
+    local image="$6"
+    
+    local config_output
+    config_output=$(get_container_config "$name") || return 1
+    
+    # Split output into command config and image
+    local current_config=$(echo "$config_output" | head -n1)
+    local current_image=$(echo "$config_output" | tail -n1)
+    
+    # Extract values from current config
+    local current_email=$(echo "$current_config" | grep -o -- "--userEmail=[^ ]*" | cut -d= -f2 | tr -d '"')
+    local current_site=$(echo "$current_config" | grep -o -- "--site=[^ ]*" | cut -d= -f2 | tr -d '"')
+    local current_token=$(echo "$current_config" | grep -o -- "--patTokenId=[^ ]*" | cut -d= -f2 | tr -d '"')
+    local current_pool=$(echo "$current_config" | grep -o -- "--poolId=[^ ]*" | cut -d= -f2 | tr -d '"' || echo "")
+    
+    # Compare configurations including image
+    [[ "$current_email" == "$user_email" ]] && \
+    [[ "$current_site" == "$site_name" ]] && \
+    [[ "$current_token" == "$token_id" ]] && \
+    [[ "$current_pool" == "${pool_id:-}" ]] && \
+    [[ "$current_image" == "$image" ]]
 }
 
 # Function to create container-specific logs directory
@@ -166,6 +216,30 @@ start_container() {
     image=$(select_image "$version")
     echo "Using image: $image"
 
+    # Check if container already exists
+    if docker ps -a --format '{{.Names}}' | grep -q "^${name}$"; then
+        echo "Container '$name' already exists, checking configuration..."
+        
+        # Check if configurations match
+        if check_container_config "$name" "$user_email" "$site_name" "$token_id" "$pool_id" "$image"; then
+            # Check if container is running
+            if docker ps --format '{{.Names}}' | grep -q "^${name}$"; then
+                echo "Container '$name' is already running with the same configuration"
+                return 0
+            else
+                echo "Container '$name' exists with same configuration but is stopped, starting it..."
+                docker start "$name"
+                echo "Container started successfully"
+                return 0
+            fi
+        else
+            echo "Container '$name' exists but with different configuration"
+            echo "Stopping and removing existing container..."
+            docker stop "$name" || true
+            docker rm "$name" || true
+        fi
+    fi
+
     # Create container-specific logs directory and ensure absolute path
     local container_logs_dir
     # Convert to absolute path if relative
@@ -178,6 +252,7 @@ start_container() {
     # Build the docker run command
     local cmd="docker run -d \
         --name \"$name\" \
+        --restart unless-stopped \
         --volume \"$container_logs_dir:/root/Documents/My_Tableau_Bridge_Repository/Logs\" \
         --volume \"$token_path:/opt/tableau/token.json\" \
         \"$image\" \
@@ -197,6 +272,34 @@ start_container() {
 
     echo "Container started successfully"
     echo "Logs will be available in: $container_logs_dir"
+}
+
+# Function to remove container
+remove_container() {
+    local name="$DEFAULT_NAME"
+    
+    while getopts "n:" opt; do
+        case $opt in
+            n) name="$OPTARG" ;;
+            \?) echo "Invalid option: -$OPTARG" >&2; show_usage; exit 1 ;;
+        esac
+    done
+
+    # Check if container exists
+    if ! docker ps -a --format '{{.Names}}' | grep -q "^${name}$"; then
+        echo "Error: Container '$name' does not exist" >&2
+        exit 1
+    fi
+
+    # Check if container is running
+    if docker ps --format '{{.Names}}' | grep -q "^${name}$"; then
+        echo "Error: Container '$name' is still running. Stop it first with: $0 stop -n $name" >&2
+        exit 1
+    fi
+
+    echo "Removing container '$name'..."
+    docker rm "$name"
+    echo "Container removed successfully"
 }
 
 # Function to stop container
@@ -273,6 +376,10 @@ case "$1" in
     "stop")
         shift
         stop_container "$@"
+        ;;
+    "remove")
+        shift
+        remove_container "$@"
         ;;
     "restart")
         shift
