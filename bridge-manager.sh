@@ -3,8 +3,7 @@
 # Set strict error handling
 set -euo pipefail
 
-# Default container name
-DEFAULT_NAME="tableau-bridge"
+# Default image
 DEFAULT_IMAGE="tableau-bridge:latest"
 
 # Help/Usage function
@@ -18,13 +17,13 @@ Commands:
     list                  List all Tableau Bridge containers (running and stopped)
     images                List all available Tableau Bridge Docker images
     start [options]       Start a new Tableau Bridge container
-    stop [-n name]        Stop a running container
-    remove [-n name]      Remove a container (must be stopped first)
-    restart [-n name]     Restart a container
-    shell [-n name]       Open an interactive shell in a running container
+    stop <name>          Stop a running container
+    remove <name>        Remove a container (must be stopped first)
+    restart <name>       Restart a container
+    shell <name>         Open an interactive shell in a running container
 
 Start Options:
-    -n <name>             Container and bridge name (default: tableau-bridge)
+    -n <name>             Container and bridge name (required)
     -l <path>             Host directory for logs
     -t <path>             Host token file path
     -u <email>            User email
@@ -39,9 +38,9 @@ Examples:
     $0 images
     $0 start -l "/path/to/logs" -t "/path/to/token.json" -u "user@example.com" -n "bridge1" -s "site" -i "MyToken"
     $0 start -v 2024.1 -l "/path/to/logs" -t "/path/to/token.json" -u "user@example.com" -n "bridge1" -s "site" -i "MyToken"
-    $0 stop -n bridge1
-    $0 restart -n bridge1
-    $0 shell -n bridge1    # Open shell in running container
+    $0 stop bridge1
+    $0 restart bridge1
+    $0 shell bridge1    # Open shell in running container
 EOF
 }
 
@@ -166,7 +165,7 @@ create_container_logs_dir() {
 
 # Function to start container
 start_container() {
-    local name="$DEFAULT_NAME"
+    local name=""
     local logs_path=""
     local token_path=""
     local user_email=""
@@ -191,7 +190,7 @@ start_container() {
     done
 
     # Verify required parameters
-    if [[ -z "$logs_path" || -z "$token_path" || -z "$user_email" ||
+    if [[ -z "$name" || -z "$logs_path" || -z "$token_path" || -z "$user_email" ||
           -z "$site_name" || -z "$token_id" ]]; then
         echo "Error: Missing required parameters" >&2
         show_usage
@@ -274,26 +273,50 @@ start_container() {
     echo "Logs will be available in: $container_logs_dir"
 }
 
-# Function to remove container
-remove_container() {
-    local name="$DEFAULT_NAME"
+# Function to validate container name and existence
+validate_container_name() {
+    local name="$1"
+    local running_only="${2:-false}"
     
-    while getopts "n:" opt; do
-        case $opt in
-            n) name="$OPTARG" ;;
-            \?) echo "Invalid option: -$OPTARG" >&2; show_usage; exit 1 ;;
-        esac
-    done
-
-    # Check if container exists
-    if ! docker ps -a --format '{{.Names}}' | grep -q "^${name}$"; then
-        echo "Error: Container '$name' does not exist" >&2
+    # Verify name parameter is provided
+    if [[ -z "$name" ]]; then
+        echo "Error: Please specify the name of a container" >&2
+        echo "Available containers:" >&2
+        if $running_only; then
+            docker ps --filter "ancestor=tableau-bridge" --format "{{.Names}}" >&2
+        else
+            docker ps -a --filter "ancestor=tableau-bridge" --format "{{.Names}}" >&2
+        fi
         exit 1
     fi
 
+    # Check if container exists
+    if $running_only; then
+        if ! docker ps --format '{{.Names}}' | grep -q "^${name}$"; then
+            echo "Error: Container '$name' is not running" >&2
+            echo "Available running containers:" >&2
+            docker ps --filter "ancestor=tableau-bridge" --format "{{.Names}}" >&2
+            exit 1
+        fi
+    else
+        if ! docker ps -a --format '{{.Names}}' | grep -q "^${name}$"; then
+            echo "Error: Container '$name' does not exist" >&2
+            echo "Available containers:" >&2
+            docker ps -a --filter "ancestor=tableau-bridge" --format "{{.Names}}" >&2
+            exit 1
+        fi
+    fi
+}
+
+# Function to remove container
+remove_container() {
+    local name="$1"
+    
+    validate_container_name "$name"
+    
     # Check if container is running
     if docker ps --format '{{.Names}}' | grep -q "^${name}$"; then
-        echo "Error: Container '$name' is still running. Stop it first with: $0 stop -n $name" >&2
+        echo "Error: Container '$name' is still running. Stop it first with: $0 stop $name" >&2
         exit 1
     fi
 
@@ -304,14 +327,8 @@ remove_container() {
 
 # Function to stop container
 stop_container() {
-    local name="$DEFAULT_NAME"
-    
-    while getopts "n:" opt; do
-        case $opt in
-            n) name="$OPTARG" ;;
-            \?) echo "Invalid option: -$OPTARG" >&2; show_usage; exit 1 ;;
-        esac
-    done
+    local name="$1"
+    validate_container_name "$name"
 
     echo "Stopping container '$name'..."
     docker stop "$name"
@@ -320,14 +337,8 @@ stop_container() {
 
 # Function to restart container
 restart_container() {
-    local name="$DEFAULT_NAME"
-    
-    while getopts "n:" opt; do
-        case $opt in
-            n) name="$OPTARG" ;;
-            \?) echo "Invalid option: -$OPTARG" >&2; show_usage; exit 1 ;;
-        esac
-    done
+    local name="$1"
+    validate_container_name "$name"
 
     echo "Restarting container '$name'..."
     docker restart "$name"
@@ -336,20 +347,8 @@ restart_container() {
 
 # Function to open shell in container
 shell_container() {
-    local name="$DEFAULT_NAME"
-    
-    while getopts "n:" opt; do
-        case $opt in
-            n) name="$OPTARG" ;;
-            \?) echo "Invalid option: -$OPTARG" >&2; show_usage; exit 1 ;;
-        esac
-    done
-
-    # Check if container exists and is running
-    if ! docker ps --format '{{.Names}}' | grep -q "^${name}$"; then
-        echo "Error: Container '$name' is not running" >&2
-        exit 1
-    fi
+    local name="$1"
+    validate_container_name "$name" true
 
     echo "Opening shell in container '$name'..."
     docker exec -it "$name" /bin/bash
@@ -375,19 +374,23 @@ case "$1" in
         ;;
     "stop")
         shift
-        stop_container "$@"
+        validate_container_name "${1:-}"
+        stop_container "$1"
         ;;
     "remove")
         shift
-        remove_container "$@"
+        validate_container_name "${1:-}"
+        remove_container "$1"
         ;;
     "restart")
         shift
-        restart_container "$@"
+        validate_container_name "${1:-}"
+        restart_container "$1"
         ;;
     "shell")
         shift
-        shell_container "$@"
+        validate_container_name "${1:-}" true
+        shell_container "$1"
         ;;
     *)
         echo "Unknown command: $1" >&2
