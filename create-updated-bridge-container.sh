@@ -141,6 +141,7 @@ fi
 
 echo "Tagging Docker image with version $VERSION..."
 run_cmd "docker tag tableau-bridge:'$BUILD_NUMBER' tableau-bridge:'$VERSION'" "Tagging Docker image..."
+run_cmd "docker tag tableau-bridge:'$BUILD_NUMBER' tableau-bridge:latest" "Tagging Docker image as latest..."
 
 echo "Docker image built and tagged successfully!"
 echo "Build logs available at: $LOG_FILE"
