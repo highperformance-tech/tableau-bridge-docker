@@ -148,7 +148,7 @@ start_container() {
         exit 1
     fi
 
-    # Verify paths exist
+    # Verify paths exist and convert to absolute paths
     if [[ ! -d "$logs_path" ]]; then
         echo "Error: Logs directory does not exist: $logs_path" >&2
         exit 1
@@ -157,6 +157,9 @@ start_container() {
         echo "Error: Token file does not exist: $token_path" >&2
         exit 1
     fi
+
+    # Convert token path to absolute path
+    token_path=$(cd "$(dirname "$token_path")" && pwd)/$(basename "$token_path") || { echo "Error: Could not resolve token file path" >&2; exit 1; }
 
     # Select image version
     local image
