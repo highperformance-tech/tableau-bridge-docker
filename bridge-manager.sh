@@ -157,7 +157,7 @@ create_container_logs_dir() {
     local container_name="$2"
     
     # Get a unique identifier based on timestamp and container name
-    local container_dir="${base_logs_path}/${container_name}-$(date +%Y%m%d-%H%M%S)"
+    local container_dir="${base_logs_path}/${container_name}"
     
     # Create the container-specific logs directory
     mkdir -p "$container_dir"
