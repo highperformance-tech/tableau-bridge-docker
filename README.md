@@ -8,6 +8,18 @@ This Docker container runs Tableau Bridge on Amazon Linux 2023. It leverages an 
 2. A shell environment with `curl`, `wget`, `grep`, `sed`, and `docker` available.
 3. A Tableau Site admin Personal Access Token (PAT).
 
+## Directory Structure
+
+The project requires the following directory structure:
+```
+tableau-bridge-docker/
+├── cache/              # Cached downloads of Bridge RPM and drivers
+├── drivers/            # ODBC and JDBC drivers
+│   ├── install.sh     # Driver installation script
+│   └── jdbc/          # JDBC driver files
+└── logs/              # Container-specific log directories
+```
+
 ## Overview
 
 Instead of manually supplying the Tableau Bridge RPM package and Amazon Redshift ODBC drivers, the provided script `create-updated-bridge-container.sh` automatically:
@@ -24,7 +36,7 @@ The Docker image uses Amazon Linux 2023 as a base and pre-installs necessary dep
 
 Run the `create-updated-bridge-container.sh` script from the project root. This script handles fetching the latest versions and building the Docker image.
 
-For standard execution:
+For standard execution (uses latest Bridge version):
 ```bash
 ./create-updated-bridge-container.sh
 ```
@@ -34,11 +46,28 @@ For verbose logging, add the `-v` flag:
 ./create-updated-bridge-container.sh -v
 ```
 
+To build a specific version, use the `-b` flag with a build number:
+```bash
+./create-updated-bridge-container.sh -b 20243.25.0114.1153
+```
+
+The build number format is `{major}{minor}.{YY}.{MMDD}.{HHMM}`, where:
+- major: Major version number (e.g., 2024)
+- minor: Minor version number (single digit)
+- YY: Two-digit build date year
+- MMDD: Two-digit month and two-digit day of build
+- HHMM: Two-digit hour and minute in 24-hour format
+
+The script will validate the build number format and components before attempting to download and build that specific version.
+
 The script will:
-- Download and cache the latest Tableau Bridge RPM.
+- Download and cache the latest Tableau Bridge RPM in the `cache` directory.
 - Download and cache the latest Amazon Redshift ODBC driver.
 - Move the downloaded driver into the `drivers` directory.
-- Build the Docker image if it does not already exist, tagging it with both the full build number and a simplified version.
+- Build the Docker image if it does not already exist, tagging it with:
+  * Full build number (e.g., 20243.25.0114.1153)
+  * Major.minor version (e.g., 2024.3) if it's the latest build in that version
+  * Latest tag if it's the highest version with the most recent build date
 
 ### 2. Dockerfile and Drivers Installation
 
@@ -70,8 +99,6 @@ done
 # Copy JDBC drivers to the correct location
 cp -r jdbc /opt/tableau/tableau_driver/jdbc
 ```
-
-- You can customize the `Dockerfile` and `drivers/install.sh` script to include additional dependencies or configurations.
 
 ### 3. Container Management
 
@@ -118,6 +145,9 @@ Available commands:
 # Stop a running container
 ./bridge-manager.sh stop container-name
 
+# Remove a stopped container
+./bridge-manager.sh remove container-name
+
 # Restart a container
 ./bridge-manager.sh restart container-name
 
@@ -143,7 +173,7 @@ The script will:
 - For partial matches: Use the first matching version
 - For interactive selection: Display a numbered list of available versions to choose from
 
-Note: When starting a container, the script automatically creates a unique logs directory for each container using the format `container-name-YYYYMMDD-HHMMSS` within the specified logs path. This ensures that log files from different containers don't conflict with each other.
+Note: When starting a container, the script automatically creates a unique logs directory for each container using the format `container-name` within the specified logs path. This ensures that log files from different containers don't conflict with each other.
 
 ### 4. Token Configuration
 
@@ -154,15 +184,97 @@ Create a JSON file containing your PAT token, for example `token.json`:
 }
 ```
 
-## Monitoring
+## Container Configuration Management
 
-Bridge logs are available in container-specific directories under the mounted logs directory on your host machine. Each container gets its own timestamped directory to prevent log file conflicts when running multiple containers.
+When starting a Bridge container, the script performs several checks:
+- If a container with the specified name already exists:
+  1. Checks if the configuration (user email, site, token ID, pool ID, and image) matches
+  2. If configurations match and container is running: No action needed
+  3. If configurations match but container is stopped: Automatically starts the container
+  4. If configurations differ: Stops and removes the old container, then creates a new one
+- For new containers:
+  1. Creates a unique logs directory (`container-name`)
+  2. Sets up volume mounts for logs and token file
+  3. Configures container with restart policy (`unless-stopped`) and specified parameters
 
-## Security Notes
+## Security Best Practices
 
-- Store your PAT token securely and restrict access to the token file.
-- Use one PAT token per Bridge client as recommended by Tableau.
-- Ensure proper file permissions on mounted volumes.
+### Container Security
+1. Resource Isolation:
+   - Container runs with default Docker isolation
+   - Volume mounts are restricted to logs and token file
+   - Network access is controlled by Docker networking
+
+2. Token Management:
+   - Store PAT tokens securely with restricted file permissions
+   - Use one PAT token per Bridge client
+   - Regularly rotate PAT tokens
+   - Keep token files outside of version control
+
+3. Access Controls:
+   - Restrict access to Docker daemon
+   - Maintain proper file permissions on host volumes
+   - Monitor container logs for security events
+
+## Monitoring and Logging
+
+### Log Management
+- Each container gets a unique logs directory
+- Logs are available in container-specific directories under the mounted logs path
+- Live logs can be viewed using `bridge-manager.sh logs container-name`
+
+### Health Monitoring
+1. Container Status:
+   - Use `bridge-manager.sh list` to view container status
+   - Check container resource usage with Docker stats: `docker stats container-name`
+   - Monitor Bridge client connectivity in logs
+
+2. Connection Status:
+   - Bridge client connectivity to Tableau Server
+   - Data source connection status
+   - Pool membership status (if applicable)
+
+## Troubleshooting
+
+### Common Issues and Solutions
+
+1. Container Startup Failures:
+   - Verify token file exists and has correct permissions
+   - Check logs for authentication errors
+   - Ensure required ports are available
+   - Verify resource constraints aren't exceeded
+
+2. Authentication Issues:
+   - Confirm PAT token hasn't expired
+   - Verify token file format is correct
+   - Check user permissions on Tableau Cloud
+   - Ensure site name matches exactly
+
+3. Data Source Connectivity:
+   - Verify ODBC/JDBC drivers are properly installed
+   - Check network connectivity to data sources
+   - Review driver configurations
+   - Ensure credentials are correct
+
+4. Driver-Related Issues:
+   - Verify driver installation in container
+   - Check driver compatibility with data sources
+   - Review driver logs for errors
+   - Ensure driver paths are correct
+
+### Troubleshooting Tools
+1. Container Shell Access:
+   ```bash
+   ./bridge-manager.sh shell container-name
+   ```
+2. Live Log Viewing:
+   ```bash
+   ./bridge-manager.sh logs container-name
+   ```
+3. Container Information:
+   ```bash
+   docker inspect container-name
+   ```
 
 ## Upgrading
 
@@ -173,26 +285,8 @@ To upgrade the Bridge client:
 4. Gradually replace existing containers with the updated version.
 5. Monitor for stability before full deployment.
 
-## Container Configuration Management
+## Additional Resources
 
-When starting a Bridge container, the script performs several checks:
-- If a container with the specified name already exists:
-  1. Checks if the configuration (user email, site, token ID, pool ID, and image) matches
-  2. If configurations match and container is running: No action needed
-  3. If configurations match but container is stopped: Automatically starts the container
-  4. If configurations differ: Stops and removes the old container, then creates a new one
-- For new containers:
-  1. Creates a unique timestamped logs directory
-  2. Sets up volume mounts for logs and token file
-  3. Configures container with restart policy and specified parameters
-
-## Troubleshooting
-
-If you encounter issues:
-- Ensure all required parameters are provided when starting a container
-- Verify that the PAT token file exists and is readable
-- Check that the PAT token has not expired
-- Review logs using:
-  * Container-specific logs directory under the mounted logs path
-  * Live container logs using `./bridge-manager.sh logs container-name`
-- Use `./bridge-manager.sh shell container-name` to access a running container's shell for advanced troubleshooting
+- [Tableau Bridge Documentation](https://help.tableau.com/current/online/en-us/to_bridge_install.htm)
+- [Docker Documentation](https://docs.docker.com/)
+- [Project Management Documentation](docs/bridge-environment-management.md)
