@@ -1,0 +1,5 @@
+cache
+drivers/**/*.jar
+drivers/**/*.zip
+drivers/**/*.rpm
+logs
