@@ -14,9 +14,9 @@ Usage: $0 <command> [options]
 Manage Tableau Bridge Docker containers lifecycle.
 
 Commands:
-    list                  List all Tableau Bridge containers (running and stopped)
-    images                List all available Tableau Bridge Docker images
-    start [options]       Start a new Tableau Bridge container
+    list                 List all Tableau Bridge containers (running and stopped)
+    images               List all available Tableau Bridge Docker images
+    start [options]      Start a new Tableau Bridge container
     stop <name>          Stop a running container
     remove <name>        Remove a container (must be stopped first)
     restart <name>       Restart a container
@@ -33,6 +33,8 @@ Start Options:
     -i <token-id>         PAT token ID
     -v <version>          Bridge version to use (e.g., 2024.1, 20241.23.0202.1000)
                           If not specified, lists available versions for selection
+    -m <memory>           Memory limit in bytes (optional)
+                          If not specified, uses available system memory
 
 Examples:
     $0 list
@@ -174,9 +176,10 @@ start_container() {
     local pool_id=""
     local token_id=""
     local version=""
+    local memory_limit=""
 
     # Parse options
-    while getopts "n:l:t:u:s:p:i:v:" opt; do
+    while getopts "n:l:t:u:s:p:i:v:m:" opt; do
         case $opt in
             n) name="$OPTARG" ;;
             l) logs_path="$OPTARG" ;;
@@ -186,6 +189,7 @@ start_container() {
             p) pool_id="$OPTARG" ;;
             i) token_id="$OPTARG" ;;
             v) version="$OPTARG" ;;
+            m) memory_limit="$OPTARG" ;;
             \?) echo "Invalid option: -$OPTARG" >&2; show_usage; exit 1 ;;
         esac
     done
@@ -249,8 +253,15 @@ start_container() {
 
     echo "Starting Tableau Bridge container '$name'..."
     
+    # Set memory limit if not provided
+    if [[ -z "$memory_limit" ]]; then
+        memory_limit=$(get_system_memory)
+    fi
+    
     # Build the docker run command
     local cmd="docker run -d \
+        --memory=${memory_limit} \
+        --memory-swap=${memory_limit} \
         --name \"$name\" \
         --restart unless-stopped \
         --volume \"$container_logs_dir:/root/Documents/My_Tableau_Bridge_Repository/Logs\" \
@@ -272,6 +283,11 @@ start_container() {
 
     echo "Container started successfully"
     echo "Logs will be available in: $container_logs_dir"
+}
+
+# Function to get system memory in bytes
+get_system_memory() {
+    grep MemTotal /proc/meminfo | awk '{print $2 * 1024}'
 }
 
 # Function to validate container name and existence
