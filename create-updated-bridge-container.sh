@@ -223,8 +223,9 @@ echo "Bridge RPM is ready."
 echo "Fetching latest Redshift ODBC driver version..."
 
 # Get the Redshift ODBC driver page
-REDSHIFT_PAGE=$(curl -s "https://docs.aws.amazon.com/redshift/latest/mgmt/odbc20-install-linux.html")
-REDSHIFT_URL=$(echo "$REDSHIFT_PAGE" | grep -o 'https://s3.amazonaws.com/redshift-downloads/drivers/odbc/[0-9]\+\.[0-9]\+\.[0-9]\+\.[0-9]\+/AmazonRedshiftODBC-64-bit-[0-9]\+\.[0-9]\+\.[0-9]\+\.[0-9]\+\.x86_64\.rpm' | head -1)
+# REDSHIFT_PAGE=$(curl -s "https://docs.aws.amazon.com/redshift/latest/mgmt/odbc20-install-linux.html")
+REDSHIFT_PAGE=$(curl -s "https://docs.aws.amazon.com/redshift/latest/mgmt/odbc-driver-linux-how-to-install.html")
+REDSHIFT_URL=$(echo "$REDSHIFT_PAGE" | grep -o 'https://s3.amazonaws.com/redshift-downloads/drivers/odbc/[0-9]\+\.[0-9]\+\.[0-9]\+\.[0-9]\+/AmazonRedshiftODBC-64-bit-[0-9]\+\.[0-9]\+\.[0-9]\+\.[0-9-]\+\.x86_64\.rpm' | head -1)
 
 if [ -z "$REDSHIFT_URL" ]; then
     echo "Error: Could not find Redshift ODBC driver download URL"
@@ -267,7 +268,7 @@ check_source_files() {
 
     # Check Dockerfile
     if [ -f "Dockerfile" ]; then
-        file_time=$(stat -f %m "Dockerfile")
+        file_time=$(stat -c %Y "Dockerfile")
         if [ "$file_time" -gt "$image_time" ]; then
             needs_rebuild=true
             reason="Dockerfile has been modified"
@@ -276,7 +277,7 @@ check_source_files() {
 
     # Check tableau-bridge.rpm
     if [ -f "tableau-bridge.rpm" ]; then
-        file_time=$(stat -f %m "tableau-bridge.rpm")
+        file_time=$(stat -c %Y "tableau-bridge.rpm")
         if [ "$file_time" -gt "$image_time" ]; then
             needs_rebuild=true
             reason="tableau-bridge.rpm has been modified"
@@ -286,7 +287,7 @@ check_source_files() {
     # Check all files in drivers directory
     if [ -d "drivers" ]; then
         while IFS= read -r file; do
-            file_time=$(stat -f %m "$file")
+            file_time=$(stat -c %Y "$file")
             if [ "$file_time" -gt "$image_time" ]; then
                 needs_rebuild=true
                 reason="Files in drivers directory have been modified"
@@ -306,7 +307,7 @@ check_source_files() {
 if docker image inspect tableau-bridge:"$BUILD_NUMBER" > /dev/null 2>&1; then
     echo "Docker image tableau-bridge:$BUILD_NUMBER exists, checking for modifications..."
     # Get image creation time - convert ISO 8601 to Unix timestamp
-    image_time=$(docker image inspect tableau-bridge:"$BUILD_NUMBER" --format='{{.Created}}' | cut -d'.' -f1 | xargs -I{} date -j -f "%Y-%m-%dT%H:%M:%S" "{}" "+%s")
+    image_time=$(docker image inspect tableau-bridge:"$BUILD_NUMBER" --format='{{.Created}}' | date -d "$(cut -d'.' -f1)" "+%s")
     
     if check_source_files "$image_time"; then
         echo "No source files have been modified since last build. Skipping build."
