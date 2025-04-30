@@ -1,0 +1,6 @@
+name: tableau-bridge
+tags:
+  - 2025.1
+  - 20251.25.0313.2002
+components:
+  bridge: 20251.25.0313.2002

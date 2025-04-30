@@ -14,24 +14,29 @@ RUN yum -y update && \
     findutils \
     dbus-libs \
     procps \
+    wget \
     && yum clean all
 
+# Create build directory for component installation
+RUN mkdir -p /build
+
 # Create directories for drivers and Bridge
-RUN mkdir -p /opt/tableau/tableau_driver/jdbc && \
-    mkdir -p /drivers
+RUN mkdir -p /opt/tableau/tableau_driver/jdbc
 
-# Copy drivers directory (to be mounted at runtime)
-COPY drivers/ /drivers/
+# Install yq for build script
+RUN curl -L https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 -o /usr/local/bin/yq && \
+    chmod +x /usr/local/bin/yq
 
-# Install drivers
-RUN cd /drivers && \
-    chmod +x install.sh && \
-    ./install.sh
+# Copy build files and components
+COPY components/ /build/components/
+COPY build.sh build-config.yml /build/
 
-# Install Tableau Bridge RPM
-COPY tableau-bridge.rpm .
-RUN ACCEPT_EULA=y yum install -y ./tableau-bridge.rpm && \
-    rm -f tableau-bridge.rpm
+# Execute build script to install components
+RUN cd /build && \
+    chmod +x build.sh && \
+    ./build.sh build-config.yml && \
+    cd / && \
+    rm -rf /build
 
 # Create directory for Bridge logs
 RUN mkdir -p /root/Documents/My_Tableau_Bridge_Repository/Logs
