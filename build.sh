@@ -61,8 +61,8 @@ for component_entry in $COMPONENTS; do
     exit 1
   fi
   
-  echo "Installing component: $component_name"
-  if ! components/$component_name/install.sh; then
+  echo "Installing component: $component_name version $component_version"
+  if ! components/$component_name/install.sh "$component_version"; then
     echo "Error: Installation of component '$component_name' failed."
     exit 1
   fi

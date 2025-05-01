@@ -4,3 +4,7 @@ tags:
   - 20251.25.0313.2002
 components:
   bridge: 20251.25.0313.2002
+  redshift: latest
+  mssql: latest
+  snowflake: latest
+  postgres: latest
