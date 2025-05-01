@@ -9,10 +9,113 @@ if [ -z "$VERSION" ]; then
     exit 1
 fi
 
-# Function to scrape and return the latest version from Snowflake's repo
+# Function to compare two version strings using semver rules
+# Returns:
+#   1  if version1 > version2
+#   0  if version1 = version2
+#   -1 if version1 < version2
+# Follows semver precedence:
+#   - Major version (first number) has highest precedence
+#   - Minor version (second number) has second highest precedence
+#   - Patch version (third number) has lowest precedence
+#   Example: 3.8.0 > 2.25.12 (because 3 > 2)
+compare_versions() {
+    # Early return if versions are identical
+    if [[ $1 == $2 ]]; then
+        echo 0
+        return
+    fi
+
+    # Split versions into arrays using dot as delimiter
+    local IFS=.
+    local i ver1=($1) ver2=($2)
+
+    # Ensure both arrays have same length by padding with zeros
+    for ((i=${#ver1[@]}; i<${#ver2[@]}; i++)); do
+        ver1[i]=0
+    done
+    for ((i=${#ver2[@]}; i<${#ver1[@]}; i++)); do
+        ver2[i]=0
+    done
+
+    # Compare version components with proper numeric conversion
+    # Using base 10 (10#) to ensure proper numeric comparison
+    for ((i=0; i<${#ver1[@]}; i++)); do
+        local v1=$((10#${ver1[i]:-0}))  # Convert to base 10, default to 0 if empty
+        local v2=$((10#${ver2[i]:-0}))  # Convert to base 10, default to 0 if empty
+        
+        if ((v1 > v2)); then
+            echo 1
+            return
+        fi
+        if ((v1 < v2)); then
+            echo -1
+            return
+        fi
+    done
+
+    # All components are equal
+    echo 0
+}
+
+# Function to validate semver format
+validate_version() {
+    if [[ ! $1 =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+        return 1
+    fi
+    return 0
+}
+
+# Function to scrape and return the latest version from Snowflake's downloads page
 get_latest_version() {
-    echo "Using default latest Snowflake ODBC driver version..." >&2
-    echo "3.8.0"
+    local repo_base="https://www.snowflake.com/en/developers/downloads/odbc/"
+    local temp_file
+    local latest_version=""
+    
+    # Create temporary file
+    temp_file=$(mktemp)
+    
+    # Get directory listing from repository
+    if ! curl -s -f "$repo_base" > "$temp_file"; then
+        rm -f "$temp_file"
+        echo "Error: Failed to access Snowflake repository" >&2
+        exit 1
+    fi
+    
+    # Extract version numbers from directory listing
+    local versions
+    versions=$(grep -oE 'snowflake-odbc-[0-9]+\.[0-9]+\.[0-9]+' "$temp_file" | cut -d'-' -f3 | tr -d '"/' | sort -u)
+    
+    # Clean up temporary file
+    rm -f "$temp_file"
+    
+    if [ -z "$versions" ]; then
+        echo "Error: No version numbers found in repository" >&2
+        exit 1
+    fi
+    
+    # Find the latest version by comparing all found versions
+    while read -r version; do
+        # Validate version format
+        if ! validate_version "$version"; then
+            continue
+        fi
+        
+        if [ -z "$latest_version" ]; then
+            latest_version="$version"
+        else
+            if [ "$(compare_versions "$version" "$latest_version")" -eq 1 ]; then
+                latest_version="$version"
+            fi
+        fi
+    done <<< "$versions"
+    
+    if [ -z "$latest_version" ]; then
+        echo "Error: Failed to determine latest version" >&2
+        exit 1
+    fi
+    
+    echo "$latest_version"
 }
 
 # If version is "latest", get the current version number
