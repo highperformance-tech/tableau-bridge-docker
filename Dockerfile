@@ -15,13 +15,12 @@ RUN yum -y update && \
     dbus-libs \
     procps \
     wget \
-    && yum clean all
+    && yum clean all \
+    && rm /etc/odbcinst.ini \
+    && touch /etc/odbcinst.ini
 
-# Create build directory for component installation
-RUN mkdir -p /build
-
-# Create directories for drivers and Bridge
-RUN mkdir -p /opt/tableau/tableau_driver/jdbc
+# Create build directory for component installation, drivers, and Bridge logs
+RUN mkdir -p /build /opt/tableau/tableau_driver/jdbc /root/Documents/My_Tableau_Bridge_Repository/Logs
 
 # Install yq for build script
 RUN curl -L https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 -o /usr/local/bin/yq && \
@@ -37,9 +36,6 @@ RUN cd /build && \
     ./build.sh build-config.yml && \
     cd / && \
     rm -rf /build
-
-# Create directory for Bridge logs
-RUN mkdir -p /root/Documents/My_Tableau_Bridge_Repository/Logs
 
 # Create volume mount point for logs
 VOLUME /root/Documents/My_Tableau_Bridge_Repository/Logs
