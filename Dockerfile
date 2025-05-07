@@ -43,5 +43,7 @@ VOLUME /root/Documents/My_Tableau_Bridge_Repository/Logs
 # Set working directory
 WORKDIR /opt/tableau/tableau_bridge
 
+ENV PATH="$PATH:/opt/mssql-tools/bin"
+
 # Run Bridge in foreground
 ENTRYPOINT ["/opt/tableau/tableau_bridge/bin/run-bridge.sh", "-e"]
